@@ -221,6 +221,13 @@
       NOTE: All files are locally processed in your browser and never leave your computer.
     </p>
   </div>
+  <div id="controls" style="display: none; text-align: center; margin-bottom: 1rem; background-color: white; padding: 1rem; border-radius: 8px; max-width: 800px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);">
+      <button id="select-all">Select All</button>
+      <button id="export-selected">Export Selected</button>
+      <label><input type="radio" name="export-type" value="combined" checked> Combined file</label>
+      <label><input type="radio" name="export-type" value="individual"> Individual files</label>
+      <p style="font-size: 0.9rem; margin-top: 0.5rem; color: #666;">Files will be saved to your browser's default download folder.</p>
+  </div>
   <div id="podcasts">
   </div>
   <div id="transcript">
@@ -228,6 +235,7 @@
     <div class="content"></div>
   </div>
   <a class="github" href="https://github.com/dado3212/apple-podcast-transcripts" target="_blank"><img src="images/github.svg"/></a>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="./sql-wasm.js"></script>
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-M15SP790QM"></script>
   <script>
@@ -388,17 +396,49 @@
           if (description == '') {
             description = transcript.transcripts.map(s => s.sentences).join("\n");
           }
-          podcastDiv.innerHTML = `
-          <div class="info">${formatDate(transcript.time)} · ${formatTime(transcript.duration)}</div>
-          <div class="title">${transcript.title}</div>
-          <span class="author">${transcript.author}</span>
-          <div class="description">${description}</div>
-          `;
+          
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.className = 'episode-checkbox';
+          checkbox.style.marginRight = '10px';
+          checkbox.dataset.episodeTitle = transcript.title;
+          checkbox.dataset.podcastName = transcript.author;
+          checkbox.dataset.transcript = JSON.stringify(transcript.transcripts);
 
-          podcastDiv.onclick = () => openTranscriptPopup(transcript.transcripts);
+          const titleDiv = document.createElement('div');
+          titleDiv.className = 'title';
+          titleDiv.textContent = transcript.title;
 
+          const infoDiv = document.createElement('div');
+          infoDiv.className = 'info';
+          infoDiv.textContent = `${formatDate(transcript.time)} · ${formatTime(transcript.duration)}`;
+
+          const authorSpan = document.createElement('span');
+          authorSpan.className = 'author';
+          authorSpan.textContent = transcript.author;
+
+          const descriptionDiv = document.createElement('div');
+          descriptionDiv.className = 'description';
+          descriptionDiv.textContent = description;
+          
+          const contentDiv = document.createElement('div');
+          contentDiv.style.cursor = 'pointer';
+          contentDiv.onclick = () => openTranscriptPopup(transcript.transcripts);
+          contentDiv.appendChild(infoDiv);
+          contentDiv.appendChild(titleDiv);
+          contentDiv.appendChild(authorSpan);
+          contentDiv.appendChild(descriptionDiv);
+
+          const containerDiv = document.createElement('div');
+          containerDiv.style.display = 'flex';
+          containerDiv.style.alignItems = 'center';
+          containerDiv.appendChild(checkbox);
+          containerDiv.appendChild(contentDiv);
+          
+          podcastDiv.appendChild(containerDiv);
           podcasts.appendChild(podcastDiv);
         }
+
         // If there aren't any transcripts include a little thing saying why
         if (Object.values(transcripts).length === 0) {
           const podcastDiv = document.createElement("div");
@@ -411,6 +451,9 @@
           `;
 
           podcasts.appendChild(podcastDiv);
+          document.getElementById('controls').style.display = 'none';
+        } else {
+          document.getElementById('controls').style.display = 'block';
         }
       } catch (e) {
         const podcastDiv = document.createElement("div");
@@ -427,6 +470,68 @@
       }
     });
 
+    document.getElementById('select-all').addEventListener('click', () => {
+        const checkboxes = document.querySelectorAll('.episode-checkbox');
+        const allSelected = Array.from(checkboxes).every(cb => cb.checked);
+        checkboxes.forEach(cb => cb.checked = !allSelected);
+    });
+
+    document.getElementById('export-selected').addEventListener('click', () => {
+        const checkboxes = document.querySelectorAll('.episode-checkbox:checked');
+        if (checkboxes.length === 0) {
+            alert('Please select at least one episode to export.');
+            return;
+        }
+
+        const exportType = document.querySelector('input[name="export-type"]:checked').value;
+
+        if (exportType === 'combined') {
+            let markdownContent = '';
+            checkboxes.forEach(cb => {
+                const episodeTitle = cb.dataset.episodeTitle;
+                const podcastName = cb.dataset.podcastName;
+                const transcript = JSON.parse(cb.dataset.transcript).map(s => s.sentences).join('\n');
+                markdownContent += `# ${episodeTitle}\n\n`;
+                markdownContent += `**Podcast:** ${podcastName}\n\n`;
+                markdownContent += `${transcript}\n\n---\n\n`;
+            });
+            downloadFile('transcripts.md', markdownContent);
+            alert(`Export complete! Your file should now be in your downloads folder.`);
+        } else {
+            const zip = new JSZip();
+            checkboxes.forEach(cb => {
+                const episodeTitle = cb.dataset.episodeTitle;
+                const podcastName = cb.dataset.podcastName;
+                const transcript = JSON.parse(cb.dataset.transcript).map(s => s.sentences).join('\n');
+                let markdownContent = `# ${episodeTitle}\n\n`;
+                markdownContent += `**Podcast:** ${podcastName}\n\n`;
+                markdownContent += `${transcript}\n\n`;
+                const filename = `${podcastName} - ${episodeTitle}.md`.replace(/[\/\?%*:|"<>]/g, '-');
+                zip.file(filename, markdownContent);
+            });
+            zip.generateAsync({type:"blob"}).then(function(content) {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = 'transcripts.zip';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+                alert(`Export complete! Your 'transcripts.zip' file should now be in your downloads folder.`);
+            });
+        }
+    });
+
+    function downloadFile(filename, content) {
+        const element = document.createElement('a');
+        element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(content));
+        element.setAttribute('download', filename);
+        element.style.display = 'none';
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+    }
+    
     async function traverseFileTree(entry) {
       if (entry.isFile) {
         return new Promise((resolve) => {
