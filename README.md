@@ -1,54 +1,58 @@
 # <img src="/favicons/favicon-96x96.png?raw=true" height="32px" alt=""/> Apple Podcast Transcript Viewer
 
-This is a simple UI tool for viewing full transcripts in a way that you can actually copy them. No software needed and it should work with any Mac with the Podcasts app just by visiting the website, https://alexbeals.com/projects/podcasts/. All you have to do is follow the instructions and drag-and-drop your podcasts folder.
+This is a simple UI tool for viewing and exporting Apple Podcast transcripts. No software installation is needed; it runs entirely in your web browser. It should work on any Mac with the Podcasts app.
 
-This all works locally without uploading anything, which you can confirm by disabling the Internet after the website is loaded. 
+**Live version: [https://alexbeals.com/projects/podcasts/](https://alexbeals.com/projects/podcasts/)**
 
-<img width="1368" alt="Screenshot 2025-01-30 at 11 31 52 PM" src="https://github.com/user-attachments/assets/683f252d-4255-47d5-9e15-2c747ffefb68" />
+![Screenshot of the Apple Podcast Transcript Viewer](/images/og.png)
 
-Once you drag and drop your files you can browse all of the episodes with transcripts.
+## How It Works
 
-<img width="1368" alt="Screenshot 2025-01-30 at 11 31 47 PM" src="https://github.com/user-attachments/assets/a108a39a-2fbf-4971-a1ee-336d2ec45e9e" />
+The Apple Podcasts app on macOS stores transcript data locally on your machine when you view a transcript in the app. This tool takes advantage of that local cache.
 
-Clicking on any of them will pull up the full transcript, which you can copy and paste to whatever tool you want to handle the file in. You can also select multiple transcripts and download them as a single markdown file or as a zip of individual markdown files.
+1.  **Open the Podcasts App:** In the macOS Podcasts app, go to the episode you want and view its transcript. This will ensure the data is cached locally.
+2.  **Locate the Data Folder:** Open Finder, press `Cmd+Shift+G`, and paste the following path:
+    ```
+    ~/Library/Group Containers/243LU875E5.groups.com.apple.podcasts
+    ```
+3.  **Drag and Drop:** Drag the entire contents of that folder onto the Apple Podcast Transcript Viewer website.
 
-<img width="1144" alt="Screenshot 2025-01-31 at 12 08 35 AM" src="https://github.com/user-attachments/assets/0985f961-b661-4679-b6db-026539fa7062" />
+All processing happens locally in your browser; no files are ever uploaded to a server.
 
-## Where Does This Come From?
+## Features
 
-The data is locally stored in `~/Library/Group Containers/243LU875E5.groups.com.apple.podcasts/Library/Cache/Assets/TTML`. The tool also pulls in the `.sqlite` folder to display additional information about the podcast to make it easier to find the one you're looking for. Shoutout to @mattdanielmurphy and his [repo here](https://github.com/mattdanielmurphy/apple-podcast-transcript-extractor) which I found when originally trying to do this for a podcast.
+*   **View Transcripts:** See the full transcript for any podcast episode.
+*   **Copy and Paste:** Easily copy parts of the transcript.
+*   **Export:**
+    *   Export multiple transcripts as a single Markdown file.
+    *   Export multiple transcripts as a zip file containing individual Markdown files.
+*   **Search by Name:** The tool now supports directly searching for podcasts by name within the Docker application.
 
-## Local Debugging
-Loading files doesn't work just by opening from `file://` in your browser, so instead use Python to set up a local server at http://localhost:8000/.
+## Local Development
 
-```
+To run this tool locally for development, you'll need to set up a simple web server.
+
+```bash
 python3 -m http.server
 ```
 
+Then, open your browser to `http://localhost:8000`.
+
 ## Docker Usage
 
-To run this application in a Docker container, you can use the following commands:
+You can also run this application in a Docker container.
 
 ```bash
+# Build the Docker image
 docker build -t apple-podcast-transcripts .
+
+# Run the Docker container
 docker run -p 8000:8000 apple-podcast-transcripts
 ```
 
-Then open your browser to http://localhost:8000.
+Then, open your browser to `http://localhost:8000`.
 
-## How did you get WAL working with sql.js??
+## Technical Details
 
-Great question. This [issue was the key](https://github.com/sql-js/sql.js/issues/372). But the compiling steps were a nightmare, so I just manually modified the `sql-wasm.js` file. Will need to do this again with a version boost. Specifically you can look for the `dbfile_` bit in code, find the `if(null!=g)` code and copy it with a different variable (and the '-wal' suffix in the filename definition).
+The tool uses `sql.js` to read the podcast metadata from the local SQLite database. A clever hack (see the source code) was required to get `sql.js` to work with the Write-Ahead Logging (WAL) file that the Podcasts app uses.
 
-Original:
-```
-function e(g){this.filename="dbfile_"+(4294967295*Math.random()>>>0);if(null!=g){var l=this.filename,n="/",t=l;n&&(n="string"==typeof n?n:ja(n),t=l?x(n+"/"+l):
-n);l=ka(!0,!0);t=la(t,(void 0!==l?l:438)&4095|32768,0);if(g){if("string"==typeof g){n=Array(g.length);for(var w=0,A=g.length;w<A;++w)n[w]=g.charCodeAt(w);g=n}ma(t,l|146);n=na(t,577);oa(n,g,0,g.length,0);pa(n);ma(t,l)}}}
-```
-
-Replacement:
-```
-function e(g,zzz){this.filename="dbfile_"+(4294967295*Math.random()>>>0);if(null!=g){var l=this.filename,n="/",t=l;n&&(n="string"==typeof n?n:ja(n),t=l?x(n+"/"+l):
-n);l=ka(!0,!0);t=la(t,(void 0!==l?l:438)&4095|32768,0);if(g){if("string"==typeof g){n=Array(g.length);for(var w=0,A=g.length;w<A;++w)n[w]=g.charCodeAt(w);g=n}ma(t,l|146);n=na(t,577);oa(n,g,0,g.length,0);pa(n);ma(t,l)}}if(null!=zzz){var l=this.filename+"-wal",n="/",t=l;n&&(n="string"==typeof n?n:ja(n),t=l?x(n+"/"+l):
-n);l=ka(!0,!0);t=la(t,(void 0!==l?l:438)&4095|32768,0);if(zzz){if("string"==typeof zzz){n=Array(zzz.length);for(var w=0,A=zzz.length;w<A;++w)n[w]=zzz.charCodeAt(w);zzz=n}ma(t,l|146);n=na(t,577);oa(n,zzz,0,zzz.length,0);pa(n);ma(t,l)}}}
-```
